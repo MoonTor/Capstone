@@ -1,5 +1,18 @@
+#Environment variables
+.env
+
+#Python environmnet
 venv/
+.venv/
 __pychache__/
 *.pyc
 *.log
-.env
+
+#database and runtime files
+data/
+*.db
+*.db-*
+
+# TLS certificates and private KEYS
+tls/
+*.key
