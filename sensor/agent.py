@@ -1,11 +1,20 @@
 import json	#suricata writes JSON text and pythons json module converts that text into normal python dictionary
 import time	#needed to let cpu rest between alerts
 import uuid 	#needed for id's for each alert
-import requests 
+import requests
+from pathlib import Path 
 
 SENSOR_ID = "sensor2-laptop"		#name of the sensor
 EVE_FILE = "/var/log/suricata/eve.json"	#store the path to the eve file
-SERVER_URL = "http://SERVER_IP/alerts"	#put your server ip here
+
+SERVER_URL = "https://YOURSERVERHERE:8443/alerts"	#url for the server
+CA_CERT = "/home/korban/nids-certs/ca.crt"	#Store path to certs
+
+TOKEN_PATH = Path("/home/korban/nids-secrets/sensor2.token")
+SENSOR_TOKEN = TOKEN_PATH.read_text(encoding="utf-8").strip()
+
+if not SENSOR_TOKEN:
+	raise RuntimeError("Sensor authentication token is empty")
 
 #opens and reads the eve file, to parse it for specific event types
 with open(EVE_FILE, "r") as file:
@@ -63,13 +72,23 @@ with open(EVE_FILE, "r") as file:
 
 			#Try to send alert as JSON with proper HTTP header
 			try:
+	
+				headers = {
+					"Authorization": f"Bearer {SENSOR_TOKEN}"
+				}
+
 				response = requests.post(
 					SERVER_URL,
 					json=alert_data,
-					timeout=5
+					headers=headers,
+					timeout=5,
+					verify=CA_CERT
 				)
 				
 				print(f"Server response: {response.status_code}")
+				print(f"Response body: {response.text}")
+
+				response.raise_for_status()
 
 			except requests.RequestException as error:
 				print(f"Failed to send alert: {error}")
