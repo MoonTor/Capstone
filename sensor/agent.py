@@ -8,9 +8,9 @@ SENSOR_ID = "sensor2-laptop"		#name of the sensor
 EVE_FILE = "/var/log/suricata/eve.json"	#store the path to the eve file
 
 SERVER_URL = "https://YOURSERVERURL:8443/alerts"	#url for the server
-CA_CERT = "/home/korban/nids-certs/ca.crt"	#Store path to certs
+CA_CERT = "/home/yourUSER/nids-certs/ca.crt"	#Store path to certs
 
-TOKEN_PATH = Path("/home/korban/nids-secrets/sensor2.token")
+TOKEN_PATH = Path("/home/yourUSER/nids-secrets/sensor2.token")
 SENSOR_TOKEN = TOKEN_PATH.read_text(encoding="utf-8").strip()
 
 HEARTBEAT_URL = "https://YOURSERVERURL:8443/heartbeat" #URL for heatbeat endpoint
