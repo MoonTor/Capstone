@@ -7,14 +7,36 @@ from pathlib import Path
 SENSOR_ID = "sensor2-laptop"		#name of the sensor
 EVE_FILE = "/var/log/suricata/eve.json"	#store the path to the eve file
 
-SERVER_URL = "https://YOURSERVERHERE:8443/alerts"	#url for the server
+SERVER_URL = "https://YOURSERVERURL:8443/alerts"	#url for the server
 CA_CERT = "/home/korban/nids-certs/ca.crt"	#Store path to certs
 
 TOKEN_PATH = Path("/home/korban/nids-secrets/sensor2.token")
 SENSOR_TOKEN = TOKEN_PATH.read_text(encoding="utf-8").strip()
 
+HEARTBEAT_URL = "https://YOURSERVERURL:8443/heartbeat" #URL for heatbeat endpoint
+HEARTBEAT_INTERVAL = 30	
+
+#Check if token exists
 if not SENSOR_TOKEN:
 	raise RuntimeError("Sensor authentication token is empty")
+
+#Function to send periodic "heartbeats" to the server
+def send_heartbeat():
+	try:
+		response = requests.post(
+			HEARTBEAT_URL,
+			json={"sensor_id": SENSOR_ID},
+			headers={"Authorization": f"Bearer {SENSOR_TOKEN}"},
+			verify=CA_CERT,
+			timeout=5
+		)
+
+		response.raise_for_status()
+
+		print(f"Heartbeat acknowledged: HTTP {response.status_code}")
+
+	except requests.RequestException as error:
+		print(f"Heartbeat failed: {error}")
 
 #opens and reads the eve file, to parse it for specific event types
 with open(EVE_FILE, "r") as file:
@@ -23,8 +45,20 @@ with open(EVE_FILE, "r") as file:
 
 	print("Watching for new Suricata events...")
 	
+	#Start the clock for heartbeat timings
+	next_heartbeat = time.monotonic()
+
 	#keep the agent reading for new events
 	while True:
+
+		#Check if it is time to send a heartbeat
+		if time.monotonic() >= next_heartbeat:
+			send_heartbeat()
+
+			#Schedule next heartbeat
+			next_heartbeat = (time.monotonic() + HEARTBEAT_INTERVAL)
+
+		#Begin reading
 		line = file.readline()
 
 		if not line:
