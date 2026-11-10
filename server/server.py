@@ -1,8 +1,17 @@
-from fastapi import FastAPI	#main api framework
+from fastapi import FastAPI, Depends	#main api framework
 from pydantic import BaseModel	#used for data structure
 from typing import Optional	#used for optional alert fields
-from database import save_alert, save_heartbeat, get_sensor_status #import the save functions from database.py
-from fastapi import Header, HTTPException
+from database import (
+	save_alert, 
+	save_heartbeat, 
+	get_sensor_status, 
+	get_alert_statistics,
+	get_recent_alerts)    #import the save functions from database.py
+from fastapi import Header, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles 
+from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pathlib import Path
 import secrets #Pythons library for authentication token use
 
@@ -26,8 +35,37 @@ if not SENSOR_TOKENS["sensor2-laptop"]:
 	raise RuntimeError("Sensor 2 authentication token is empty")
 
 
-
+#Initialize app
 app = FastAPI()
+
+#Security
+dashboard_security = HTTPBasic()
+
+#Ensure monitoring is secure and can only be accessed through the monitoring token
+def authenticate_dashboard(credentials: HTTPBasicCredentials = Depends(dashboard_security)):
+
+	#Uses "monitor" for username and the monitoring token for the password
+	valid_username = secrets.compare_digest(credentials.username.encode("utf-8"),b"monitor")
+	valid_password = secrets.compare_digest(credentials.password.encode("utf-8"), MONITOR_TOKEN.encode("utf-8"))
+
+	if not (valid_username and valid_password):
+		raise HTTPException(
+			status_code=401,
+			detail="Invalid monitoring credentials",
+			headers={"WWW-Authenticate": "Basic"}
+		)
+
+
+#Configures where FastAPI looks for html and css files
+BASE_DIR = Path(__file__).resolve().parent
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+app.mount(
+	"/static",
+	StaticFiles(directory=str(BASE_DIR / "static")),
+	name="static"
+)
 
 #Defines base data structure for receiving alerts
 class Alert(BaseModel):
@@ -152,3 +190,48 @@ def sensor_status(
 
 	#Calculate sensor status
 	return get_sensor_status(sensor_id)
+
+
+#Endpoint for monitoring dashboard
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request, _: None = Depends(authenticate_dashboard)):
+
+	return templates.TemplateResponse(
+		request=request,
+		name="dashboard.html"
+	)
+
+
+@app.get("/dashboard/data")
+def dashboard_data(_: None = Depends(authenticate_dashboard)):
+	sensors = []
+	available_count = 0
+
+	#Retrieve the status of each sensor
+	for sensor_id in SENSOR_TOKENS:
+		status = get_sensor_status(sensor_id)
+
+		sensors.append({
+			"sensor_id": sensor_id,
+			"details": status
+		})
+
+		if status["status"] == "online":
+			available_count += 1
+
+	#Retrieve alert statistics
+	statistics = get_alert_statistics()
+
+	#Retrieve recent alerts
+	recent_alerts = get_recent_alerts(limit=10)
+
+	return {
+		"sensors": sensors,
+		"statistics": {
+			"total_alerts": statistics["total_alerts"],
+			"high_severity_alerts": statistics["high_severity_alerts"],
+			"available_sensors": available_count,
+			"total_sensors": len(SENSOR_TOKENS)
+		},
+		"recent_alerts": recent_alerts
+	}

@@ -104,7 +104,7 @@ def get_sensor_status(sensor_id: str):
 	if row is None:
 		return {
 			"sensor_id": sensor_id,
-			"status": "unkown",
+			"status": "unknown",
 			"last_seen_at": None
 		}
 
@@ -129,6 +129,57 @@ def get_sensor_status(sensor_id: str):
 		"seconds_since_heartbeat": round(elapsed, 2),
 		"heartbeat_count": heartbeat_count
 	}
+
+#Retrieve alert stats for dashboard
+def get_alert_statistics():
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		row = conn.execute("""
+			SELECT
+				COUNT(*) as total_alerts,
+				COUNT(CASE WHEN severity = 1 THEN 1 END)
+					AS high_severity_alerts
+			FROM alerts
+		""").fetchone()
+
+	return {
+		"total_alerts": row[0],
+		"high_severity_alerts": row[1]
+		}
+
+#Retrive the most recent alerts
+def get_recent_alerts(limit=10):
+	with closing(sqlite3.connect(DB_PATH)) as conn:
+		rows = conn.execute("""
+			SELECT
+				alert_id,
+				sensor_id,
+				timestamp,
+				received_at,
+				signature,
+				category,
+				severity
+			FROM alerts
+			ORDER BY received_at DESC, rowid DESC
+			LIMIT ?
+		""", (limit,)).fetchall()
+
+	alerts = []
+
+	for row in rows:
+		alerts.append({
+			"alert_id": row[0],
+			"sensor_id": row[1],
+			"timestamp": row[2],
+			"received_at": row[3],
+			"signature": row[4],
+			"category": row[5],
+			"severity": row[6]
+		})
+
+	return alerts
+
+
+
 # Main
 if __name__ == "__main__":
 	initialize_database()

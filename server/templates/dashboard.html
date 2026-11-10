@@ -1,0 +1,208 @@
+<!--This is the main monitoring dashboard html file -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Centralized NIDS Dashboard</title>
+
+    <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+
+<body>
+    <main>
+        <header>
+            <h1>Centralized NIDS Dashboard</h1>
+            <p>Network Intrusion Detection Monitoring</p>
+        </header>
+
+        <section class="stats">
+            <div class="card">
+                <h3>Total Alerts</h3>
+                <p id="total-alerts">--</p>
+            </div>
+
+            <div class="card">
+                <h3>Available Sensors</h3>
+                <p id="available-sensors">--</p>
+            </div>
+
+            <div class="card">
+                <h3>High Severity Alerts</h3>
+                <p id="high-severity-alerts">--</p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Sensor Status</h2>
+            <p id="last-updated">Waiting for data...</p>
+	    <div id="sensor-status-list"> Loading sensor information...</div>
+        </section>
+
+        <section class="panel">
+            <h2>Recent Alerts</h2>
+            <p>Recent alerts will appear here.</p>
+		<div class="table-container">
+        		<table class="alerts-table">
+            			<thead>
+                			<tr>
+                    				<th>Received</th>
+                    				<th>Sensor</th>
+                    				<th>Signature</th>
+                    				<th>Severity</th>
+                			</tr>
+            			</thead>
+
+            			<tbody id="recent-alerts-body">
+                			<tr>
+                    				<td colspan="4">Loading alerts...</td>
+                			</tr>
+            			</tbody>
+        		</table>
+    		</div>
+        </section>
+    </main>
+
+<script>
+    let refreshInProgress = false;
+
+    async function refreshSensorStatus() {
+        if (refreshInProgress) return;
+        refreshInProgress = true;
+
+        try {
+            const response = await fetch("/dashboard/data", {
+                cache: "no-store",
+                credentials: "same-origin"
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Update dashboard statistics
+            document.getElementById("total-alerts").textContent =
+                data.statistics.total_alerts;
+
+            document.getElementById("available-sensors").textContent =
+                `${data.statistics.available_sensors} / ${data.statistics.total_sensors}`;
+
+            document.getElementById("high-severity-alerts").textContent =
+                data.statistics.high_severity_alerts;
+
+
+            // Update sensor status
+            const sensorList = document.getElementById(
+                "sensor-status-list"
+            );
+
+            sensorList.replaceChildren();
+
+            for (const sensor of data.sensors) {
+                const details = sensor.details;
+
+                const section = document.createElement("div");
+                section.className = "sensor-entry";
+
+                const name = document.createElement("h3");
+                name.textContent = sensor.sensor_id;
+
+                const status = document.createElement("p");
+                status.textContent =
+                    `Status: ${details.status.toUpperCase()}`;
+
+                status.className =
+                    details.status === "online"
+                        ? "status-online"
+                        : "status-offline";
+
+                const heartbeat = document.createElement("p");
+
+                const lastSeen = details.last_seen_at
+                    ? new Date(details.last_seen_at).toLocaleString()
+                    : "Never";
+
+                heartbeat.textContent =
+                    `Last heartbeat: ${lastSeen}`;
+
+                const count = document.createElement("p");
+                count.textContent =
+                    `Heartbeats received: ${details.heartbeat_count ?? 0}`;
+
+                section.append(name, status, heartbeat, count);
+                sensorList.appendChild(section);
+            }
+
+
+            // Update recent alerts
+            const alertTable = document.getElementById(
+                "recent-alerts-body"
+            );
+
+            alertTable.replaceChildren();
+
+            if (data.recent_alerts.length === 0) {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+
+                cell.colSpan = 4;
+                cell.textContent = "No alerts recorded yet.";
+
+                row.appendChild(cell);
+                alertTable.appendChild(row);
+            }
+
+            for (const alert of data.recent_alerts) {
+                const row = document.createElement("tr");
+
+                const received = document.createElement("td");
+                received.textContent =
+                    new Date(alert.received_at).toLocaleString();
+
+                const sensor = document.createElement("td");
+                sensor.textContent = alert.sensor_id;
+
+                const signature = document.createElement("td");
+                signature.textContent = alert.signature;
+
+                const severity = document.createElement("td");
+                severity.textContent = alert.severity ?? "N/A";
+
+                row.append(
+                    received,
+                    sensor,
+                    signature,
+                    severity
+                );
+
+                alertTable.appendChild(row);
+            }
+
+            // Show successful refresh time
+            document.getElementById("last-updated").textContent =
+                "Last updated: " + new Date().toLocaleTimeString();
+
+        } catch (error) {
+            console.error("Dashboard refresh failed:", error);
+
+            document.getElementById("last-updated").textContent =
+                "Unable to retrieve dashboard data";
+        } finally {
+            refreshInProgress = false;
+        }
+    }
+
+    // Initial refresh
+    refreshSensorStatus();
+
+    // Automatically refresh every 2 seconds
+    setInterval(refreshSensorStatus, 2000);
+</script>
+
+</body>
+</html>
