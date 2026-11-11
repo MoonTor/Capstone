@@ -19,19 +19,22 @@ import secrets #Pythons library for authentication token use
 #Load authentication for monitoring
 MONITOR_TOKEN_PATH = Path.home() / "nids-secrets" / "monitor.token"
 
+
 MONITOR_TOKEN = MONITOR_TOKEN_PATH.read_text(encoding="utf-8").strip()
 
 if not MONITOR_TOKEN: 
 	raise RuntimeError("Monitoring token is empty")
 
-#Load authentication token for sensor2
-TOKEN_PATH = Path.home() / "nids-secrets" / "sensor2.token"
+#Load authentication tokens for sensors
+SENSOR1_TOKEN_PATH = Path.home() / "nids-secrets" / "sensor1.token"
+SENSOR2_TOKEN_PATH = Path.home() / "nids-secrets" / "sensor2.token"
 
 SENSOR_TOKENS = {
-	"sensor2-laptop": TOKEN_PATH.read_text(encoding="utf-8").strip()
+	"sensor1-pi": SENSOR1_TOKEN_PATH.read_text(encoding="utf-8").strip(),
+	"sensor2-laptop": SENSOR2_TOKEN_PATH.read_text(encoding="utf-8").strip()
 }
 
-if not SENSOR_TOKENS["sensor2-laptop"]:
+if not all (SENSOR_TOKENS.values()):
 	raise RuntimeError("Sensor 2 authentication token is empty")
 
 
