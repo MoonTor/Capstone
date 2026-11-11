@@ -1,5 +1,6 @@
 #Environment variables
 .env
+.token
 
 #Python environmnet
 venv/
@@ -12,6 +13,7 @@ __pychache__/
 data/
 *.db
 *.db-*
+alert_queue.db*
 
 # TLS certificates and private KEYS
 tls/

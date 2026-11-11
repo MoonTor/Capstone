@@ -2,19 +2,31 @@ import json	#suricata writes JSON text and pythons json module converts that tex
 import time	#needed to let cpu rest between alerts
 import uuid 	#needed for id's for each alert
 import requests
+import sqlite3
+import threading #Needed for background thread HTTPS sending
 from pathlib import Path 
+from alert_queue import (
+	initialize_queue,
+	enqueue_alert,
+	get_pending_alerts,
+	remove_alert
+)
 
 SENSOR_ID = "sensor2-laptop"		#name of the sensor
 EVE_FILE = "/var/log/suricata/eve.json"	#store the path to the eve file
 
-SERVER_URL = "https://YOURSERVERURL:8443/alerts"	#url for the server
-CA_CERT = "/home/yourUSER/nids-certs/ca.crt"	#Store path to certs
+SERVER_URL = "https://YOURURLHERE:8443/alerts"	#url for the server
+CA_CERT = "/home/USER/nids-certs/ca.crt"	#Store path to certs
 
-TOKEN_PATH = Path("/home/yourUSER/nids-secrets/sensor2.token")
+TOKEN_PATH = Path("/home/USER/nids-secrets/sensor2.token")
 SENSOR_TOKEN = TOKEN_PATH.read_text(encoding="utf-8").strip()
 
-HEARTBEAT_URL = "https://YOURSERVERURL:8443/heartbeat" #URL for heatbeat endpoint
+HEARTBEAT_URL = "https://YOURURLHERE:8443/heartbeat" #URL for heatbeat endpoint
 HEARTBEAT_INTERVAL = 30	
+
+RETRY_INTERVAL = 5 #How long in between message retry
+MAX_RETRY_BATCH = 20 #Max amount of queued alerts
+
 
 #Check if token exists
 if not SENSOR_TOKEN:
@@ -37,6 +49,65 @@ def send_heartbeat():
 
 	except requests.RequestException as error:
 		print(f"Heartbeat failed: {error}")
+
+retry_event = threading.Event()
+
+def retry_pending_alerts():
+	while True:
+		retry_event.clear()
+
+		try:
+			pending = get_pending_alerts(limit=MAX_RETRY_BATCH)
+
+			if not pending:
+				retry_event.wait(RETRY_INTERVAL)
+				continue
+		
+			failed = False
+
+			for alert in pending:
+				try:
+
+					response = requests.post(
+						SERVER_URL, 
+						json=alert,
+						headers={
+							"Authorization": f"Bearer {SENSOR_TOKEN}"
+						},
+						verify=CA_CERT,
+						timeout=5
+					)
+
+					if 200 <= response.status_code < 300:
+						remove_alert(alert["alert_id"])
+						print(f"Alert delivered: {alert['alert_id']}")
+					else:
+						print(
+							f"Alert delivery failed: "
+							f"HTTP {response.status_code}"
+						)
+						failed = True
+						break
+
+				except requests.RequestException as e:
+					print(f"Server connection error: {e}")
+					failed = True
+					break
+			if failed:
+				time.sleep(RETRY_INTERVAL)
+
+		except sqlite3.Error as e:
+			print(f"Local SQLite queue error: {e}")
+			time.sleep(RETRY_INTERVAL)
+#Initialize queue and start the background sender
+initialize_queue()
+
+sender_thread = threading.Thread(
+	target=retry_pending_alerts,
+	daemon=True
+)
+
+sender_thread.start()
 
 #opens and reads the eve file, to parse it for specific event types
 with open(EVE_FILE, "r") as file:
@@ -104,25 +175,9 @@ with open(EVE_FILE, "r") as file:
 			print("\nALERT DETECTED")
 			print(json.dumps(alert_data, indent=4))
 
-			#Try to send alert as JSON with proper HTTP header
-			try:
-	
-				headers = {
-					"Authorization": f"Bearer {SENSOR_TOKEN}"
-				}
+			#Store alert in the queue
+			enqueue_alert(alert_data)
+			print(f"Alert queued: {alert_data['alert_id']}")
 
-				response = requests.post(
-					SERVER_URL,
-					json=alert_data,
-					headers=headers,
-					timeout=5,
-					verify=CA_CERT
-				)
-				
-				print(f"Server response: {response.status_code}")
-				print(f"Response body: {response.text}")
-
-				response.raise_for_status()
-
-			except requests.RequestException as error:
-				print(f"Failed to send alert: {error}")
+			#Notify background sender that a new alert is ready
+			retry_event.set()
