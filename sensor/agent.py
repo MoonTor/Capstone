@@ -184,7 +184,7 @@ heartbeat_thread.start()
 def save_position_safely(file):
 	while True:
 		try:
-			indo = os.fstat(file.fileno())
+			info = os.fstat(file.fileno())
 
 			save_reader_state(
 				EVE_FILE,
