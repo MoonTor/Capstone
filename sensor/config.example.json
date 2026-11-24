@@ -1,0 +1,14 @@
+{
+    "sensor_id": "YOUR_SENSOR_ID",
+    "eve_file": "/var/log/suricata/eve.json",
+
+    "server_base_url": "https://YOUR_SERVER_ADDRESS:8443",
+
+    "ca_cert": "/home/USER/nids-certs/ca.crt",
+    "token_path": "/home/USER/nids-secrets/sensor.token",
+
+    "heartbeat_interval": 30,
+    "retry_interval": 5,
+    "max_retry_batch": 20,
+    "checkpoint_interval": 5
+}

@@ -5,7 +5,7 @@
 #Python environmnet
 venv/
 .venv/
-__pychache__/
+__pycache__/
 *.pyc
 *.log
 
@@ -14,7 +14,11 @@ data/
 *.db
 *.db-*
 alert_queue.db*
+*.db.*
 
 # TLS certificates and private KEYS
 tls/
 *.key
+
+#Sensor Configuration
+/sensor/config.json
